@@ -6,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("com.gradleup.shadow") version "8.3.0"
     id("maven-publish")
+    kotlin("plugin.serialization") version "2.1.0"
 }
 
 java {
@@ -23,6 +24,8 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    implementation("com.fleeksoft.ksoup:ksoup:0.2.1")
     testImplementation("com.github.brahmkshatriya:echo:$libVersion")
 }
 
