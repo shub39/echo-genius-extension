@@ -46,9 +46,7 @@ class ExtensionUnitTest {
             track = Track("0", "Satan in the Wait")
         )
 
-        searchResult.loadAll().forEach { p0 ->
-            println(p0)
-        }
+        println(searchResult.loadFirst().firstOrNull()?.title)
     }
 
 }

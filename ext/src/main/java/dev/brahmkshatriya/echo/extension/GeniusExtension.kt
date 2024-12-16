@@ -110,7 +110,7 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
             val song = parsedResponse.response.hits.firstOrNull()
 
             if (song != null) {
-                listOf(
+                return listOf(
                     Lyrics(
                         id = song.result.id.toString(),
                         title = song.result.title,
