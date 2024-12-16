@@ -43,10 +43,12 @@ class ExtensionUnitTest {
     fun testLyrics() = testIn("Testing Lyrics") {
         val searchResult = extension.searchTrackLyrics(
             clientId = "id",
-            track = Track("0", "Satan in the Wait")
+            track = Track("0", "Satan")
         )
 
-        println(searchResult.loadFirst().firstOrNull()?.title)
+        searchResult.loadAll().forEach { p0 ->
+            println(p0.title)
+        }
     }
 
 }

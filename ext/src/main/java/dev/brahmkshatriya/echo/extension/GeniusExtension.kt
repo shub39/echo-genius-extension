@@ -44,8 +44,9 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         clientId: String,
         track: Track
     ): PagedData<Lyrics> = PagedData.Single {
+        val searchQuery = "${track.title} ${track.artists.joinToString(" ")}".trim()
         val searchRequest = Request.Builder()
-            .url(BASE_URL + "search?q=${track.title}")
+            .url(BASE_URL + "search?q=$searchQuery")
             .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
             .build()
 
@@ -104,27 +105,17 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
     private suspend fun resultToLyrics(searchRequest: Request): List<Lyrics> {
         val searchResponse = client.newCall(searchRequest).await()
 
-        try {
-            val jsonString = searchResponse.body.string()
-            val parsedResponse: SearchResponse = json.decodeFromString(jsonString)
-            val song = parsedResponse.response.hits.firstOrNull()
+        val jsonString = searchResponse.body.string()
+        val parsedResponse: SearchResponse = json.decodeFromString(jsonString)
+        val hits = parsedResponse.response.hits
 
-            if (song != null) {
-                return listOf(
-                    Lyrics(
-                        id = song.result.id.toString(),
-                        title = song.result.title,
-                        subtitle = song.result.artists
-                    )
-                )
-            }
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return emptyList()
+        return hits.map {
+            Lyrics(
+                id = it.result.id.toString(),
+                title = it.result.title,
+                subtitle = it.result.artists
+            )
         }
-
-        return emptyList()
     }
 
 }
