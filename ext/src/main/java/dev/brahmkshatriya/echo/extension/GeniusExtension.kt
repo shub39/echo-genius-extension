@@ -2,6 +2,7 @@ package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
+import dev.brahmkshatriya.echo.common.clients.LyricsSearchClient
 import dev.brahmkshatriya.echo.common.helpers.ContinuationCallback.Companion.await
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Lyrics
@@ -24,7 +25,7 @@ private const val AUTH_HEADER = "Authorization"
 private const val GENIUS_API_TOKEN =
     "ZTejoT_ojOEasIkT9WrMBhBQOz6eYKK5QULCMECmOhvwqjRZ6WbpamFe3geHnvp3"
 
-class GeniusExtension : ExtensionClient, LyricsClient {
+class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
 
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
@@ -47,41 +48,33 @@ class GeniusExtension : ExtensionClient, LyricsClient {
             .url(BASE_URL + "search?q=${track.title}")
             .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
             .build()
-        val searchResponse = client.newCall(searchRequest).await()
 
-        try {
-            val jsonString = searchResponse.body.string()
-            val parsedResponse: SearchResponse = json.decodeFromString(jsonString)
-            val songId = parsedResponse.response.hits[0].result.id
-
-            val lyricsRequest = Request.Builder()
-                .url(BASE_URL + "songs/$songId")
-                .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
-                .build()
-            val lyricsResponse = client.newCall(lyricsRequest).await()
-            val parsedLyrics: LyricsResponse = json.decodeFromString(lyricsResponse.body.string())
-            val jsonLyrics = parsedLyrics.response.song.lyrics.dom
-
-            val lyrics = extractLyrics(jsonLyrics)
-
-            listOf(
-                Lyrics(
-                    id = track.id,
-                    title = track.title,
-                    subtitle = "from Genius",
-                    lyrics = Lyrics.Simple(lyrics)
-                )
-            )
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return@Single emptyList()
-        }
-
-        return@Single emptyList()
+        resultToLyrics(searchRequest)
     }
 
-    override suspend fun loadLyrics(lyrics: Lyrics): Lyrics = lyrics
+    override suspend fun loadLyrics(lyrics: Lyrics): Lyrics {
+        val lyricsRequest = Request.Builder()
+            .url(BASE_URL + "songs/${lyrics.id}")
+            .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
+            .build()
+        val lyricsResponse = client.newCall(lyricsRequest).await()
+        val parsedLyrics: LyricsResponse = json.decodeFromString(lyricsResponse.body.string())
+        val jsonLyrics = parsedLyrics.response.song.lyrics.dom
+        val extractedLyrics = extractLyrics(jsonLyrics)
+
+        return lyrics.copy(
+            lyrics = Lyrics.Simple(extractedLyrics)
+        )
+    }
+
+    override fun searchLyrics(query: String): PagedData<Lyrics> = PagedData.Single {
+        val searchRequest = Request.Builder()
+            .url(BASE_URL + "search?q=${query}")
+            .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
+            .build()
+
+        resultToLyrics(searchRequest)
+    }
 
     private fun extractLyrics(domNode: Dom): String {
         val lyrics = StringBuilder()
@@ -106,6 +99,32 @@ class GeniusExtension : ExtensionClient, LyricsClient {
         }
 
         return lyrics.toString().trim()
+    }
+
+    private suspend fun resultToLyrics(searchRequest: Request): List<Lyrics> {
+        val searchResponse = client.newCall(searchRequest).await()
+
+        try {
+            val jsonString = searchResponse.body.string()
+            val parsedResponse: SearchResponse = json.decodeFromString(jsonString)
+            val song = parsedResponse.response.hits.firstOrNull()
+
+            if (song != null) {
+                listOf(
+                    Lyrics(
+                        id = song.result.id.toString(),
+                        title = song.result.title,
+                        subtitle = song.result.artists
+                    )
+                )
+            }
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return emptyList()
+        }
+
+        return emptyList()
     }
 
 }
