@@ -1,4 +1,4 @@
-package dev.brahmkshatriya.echo.extension.response
+package dev.brahmkshatriya.echo.extension.search_response
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
