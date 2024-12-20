@@ -20,11 +20,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-private const val BASE_URL = "https://api.genius.com/"
-private const val AUTH_HEADER = "Authorization"
-private const val GENIUS_API_TOKEN =
-    "ZTejoT_ojOEasIkT9WrMBhBQOz6eYKK5QULCMECmOhvwqjRZ6WbpamFe3geHnvp3"
-
 class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
 
     private val client = OkHttpClient()
@@ -44,7 +39,7 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         clientId: String,
         track: Track
     ): PagedData<Lyrics> = PagedData.Single {
-        val searchQuery = "${track.title} ${track.artists.joinToString(" ")}".trim()
+        val searchQuery = "${track.title} ${track.artists.firstOrNull()?.name ?: ""}".trim()
         val searchRequest = Request.Builder()
             .url(BASE_URL + "search?q=$searchQuery")
             .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
@@ -102,7 +97,7 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         return lyrics.toString().trim()
     }
 
-    private suspend fun resultToLyrics(searchRequest: Request): List<Lyrics> {
+    private suspend inline fun resultToLyrics(searchRequest: Request): List<Lyrics> {
         val searchResponse = client.newCall(searchRequest).await()
 
         val jsonString = searchResponse.body.string()
@@ -118,4 +113,10 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         }
     }
 
+    private companion object {
+        private const val BASE_URL = "https://api.genius.com/"
+        private const val AUTH_HEADER = "Authorization"
+        private const val GENIUS_API_TOKEN =
+            "ZTejoT_ojOEasIkT9WrMBhBQOz6eYKK5QULCMECmOhvwqjRZ6WbpamFe3geHnvp3"
+    }
 }
