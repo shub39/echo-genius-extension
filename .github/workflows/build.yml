@@ -64,3 +64,14 @@ jobs:
           release-drop-tag: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK to Discord
+        shell: bash
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          commit=$(jq -Rsa . <<< "${{ github.event.head_commit.message }}"  | tail -c +2 | head -c -2)
+          message=$(echo "@everyone **${{ env.VERSION }}**\n$commit")
+          curl -F "payload_json={\"content\":\"${message}\"}" \
+          -F "file=@${{ env.APP_PATH }}" \
+          ${{ env.WEBHOOK }}
