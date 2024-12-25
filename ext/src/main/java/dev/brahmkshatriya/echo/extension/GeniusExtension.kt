@@ -78,7 +78,7 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         domNode.children.forEach { child ->
             when {
                 child is JsonPrimitive && child.isString -> {
-                    lyrics.append(child.content).append("\n")
+                    lyrics.append(child.content)
                 }
 
                 child is JsonObject -> {

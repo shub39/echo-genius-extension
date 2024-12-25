@@ -1,5 +1,6 @@
 package dev.brahmkshatriya.echo.extension
 
+import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -48,7 +49,15 @@ class ExtensionUnitTest {
 
         searchResult.loadAll().forEach { p0 ->
             println(p0.title)
+            println(p0.id)
         }
+    }
+
+    @Test
+    fun getLyrics() = testIn("Getting lyrics") {
+        val lyrics = extension.loadLyrics(Lyrics(id = "3836182", title = "Satan in the wait"))
+
+        println(lyrics.lyrics)
     }
 
 }
