@@ -1,5 +1,5 @@
-import java.io.ByteArrayOutputStream
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import java.io.IOException
 
 plugins {
     id("java-library")
@@ -21,11 +21,12 @@ kotlin {
 dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
-    // implementation("com.fleeksoft.ksoup:ksoup:0.2.1") Might use later tho 👀
+//    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+//     implementation("com.fleeksoft.ksoup:ksoup:0.2.1") Might use later tho 👀
     testImplementation("com.github.brahmkshatriya:echo:$libVersion")
 }
 
@@ -92,10 +93,23 @@ tasks {
 }
 
 fun execute(vararg command: String): String {
-    val outputStream = ByteArrayOutputStream()
-    project.exec {
-        commandLine(*command)
-        standardOutput = outputStream
+    val process = ProcessBuilder(*command)
+        .redirectOutput(ProcessBuilder.Redirect.PIPE)
+        .redirectError(ProcessBuilder.Redirect.PIPE)
+        .start()
+
+    val output = process.inputStream.bufferedReader().readText()
+    val errorOutput = process.errorStream.bufferedReader().readText()
+
+    val exitCode = process.waitFor()
+
+    if (exitCode != 0) {
+        throw IOException(
+            "Command failed with exit code $exitCode. Command: ${command.joinToString(" ")}\n" +
+                    "Stdout:\n$output\n" +
+                    "Stderr:\n$errorOutput"
+        )
     }
-    return outputStream.toString().trim()
+
+    return output.trim()
 }
