@@ -4,7 +4,8 @@ import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.LyricsSearchClient
 import dev.brahmkshatriya.echo.common.helpers.ContinuationCallback.Companion.await
-import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.settings.Setting
@@ -27,25 +28,25 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
 
     override suspend fun onExtensionSelected() {}
 
-    override val settingItems: List<Setting> = emptyList()
-
     private lateinit var setting: Settings
+
+    override suspend fun getSettingItems(): List<Setting> = emptyList()
 
     override fun setSettings(settings: Settings) {
         setting = settings
     }
 
-    override fun searchTrackLyrics(
+    override suspend fun searchTrackLyrics(
         clientId: String,
         track: Track
-    ): PagedData<Lyrics> = PagedData.Single {
+    ): Feed<Lyrics> {
         val searchQuery = "${track.title} ${track.artists.firstOrNull()?.name ?: ""}".trim()
         val searchRequest = Request.Builder()
             .url(BASE_URL + "search?q=$searchQuery")
             .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
             .build()
 
-        resultToLyrics(searchRequest)
+        return resultToLyrics(searchRequest)
     }
 
     override suspend fun loadLyrics(lyrics: Lyrics): Lyrics {
@@ -61,15 +62,6 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         return lyrics.copy(
             lyrics = Lyrics.Simple(extractedLyrics)
         )
-    }
-
-    override fun searchLyrics(query: String): PagedData<Lyrics> = PagedData.Single {
-        val searchRequest = Request.Builder()
-            .url(BASE_URL + "search?q=${query}")
-            .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
-            .build()
-
-        resultToLyrics(searchRequest)
     }
 
     private fun extractLyrics(domNode: Dom): String {
@@ -97,7 +89,7 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         return lyrics.toString().trim()
     }
 
-    private suspend inline fun resultToLyrics(searchRequest: Request): List<Lyrics> {
+    private suspend inline fun resultToLyrics(searchRequest: Request): Feed<Lyrics> {
         val searchResponse = client.newCall(searchRequest).await()
 
         val jsonString = searchResponse.body.string()
@@ -110,7 +102,16 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
                 title = it.result.title,
                 subtitle = it.result.artists
             )
-        }
+        }.toFeed()
+    }
+
+    override suspend fun searchLyrics(query: String): Feed<Lyrics> {
+        val searchRequest = Request.Builder()
+            .url(BASE_URL + "search?q=${query}")
+            .addHeader(AUTH_HEADER, "Bearer $GENIUS_API_TOKEN")
+            .build()
+
+        return resultToLyrics(searchRequest)
     }
 
     private companion object {

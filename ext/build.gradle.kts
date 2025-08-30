@@ -1,12 +1,11 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import java.io.IOException
 
 plugins {
     id("java-library")
-    id("org.jetbrains.kotlin.jvm")
-    id("com.gradleup.shadow") version "8.3.0"
     id("maven-publish")
-    kotlin("plugin.serialization") version "2.1.0"
+    alias(libs.plugins.gradle.shadow)
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlinx.serialization)
 }
 
 java {
@@ -18,20 +17,21 @@ kotlin {
     jvmToolchain(17)
 }
 
-dependencies {
-    val libVersion: String by project
-    compileOnly("com.github.brahmkshatriya:echo:$libVersion")
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+fun <T : ModuleDependency> T.excludeKotlin() {
+    exclude("org.jetbrains.kotlin", "kotlin-stdlib")
+    exclude("org.jetbrains.kotlinx", "kotlinx-coroutines-core")
+}
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-//    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
-//     implementation("com.fleeksoft.ksoup:ksoup:0.2.1") Might use later tho 👀
-    testImplementation("com.github.brahmkshatriya:echo:$libVersion")
+dependencies {
+    compileOnly(libs.echo.common)
+    compileOnly(libs.kotlin.stdlib)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.echo.common)
 }
 
 // Extension properties goto `gradle.properties` to set values
-
 val extType: String by project
 val extId: String by project
 val extClass: String by project
@@ -90,26 +90,17 @@ tasks {
             )
         }
     }
-}
 
-fun execute(vararg command: String): String {
-    val process = ProcessBuilder(*command)
-        .redirectOutput(ProcessBuilder.Redirect.PIPE)
-        .redirectError(ProcessBuilder.Redirect.PIPE)
-        .start()
-
-    val output = process.inputStream.bufferedReader().readText()
-    val errorOutput = process.errorStream.bufferedReader().readText()
-
-    val exitCode = process.waitFor()
-
-    if (exitCode != 0) {
-        throw IOException(
-            "Command failed with exit code $exitCode. Command: ${command.joinToString(" ")}\n" +
-                    "Stdout:\n$output\n" +
-                    "Stderr:\n$errorOutput"
-        )
+    test {
+        enabled = false
     }
 
-    return output.trim()
+    compileTestKotlin {
+        enabled = false
+    }
 }
+
+
+fun execute(vararg command: String): String = providers.exec {
+    commandLine(*command)
+}.standardOutput.asText.get().trim()

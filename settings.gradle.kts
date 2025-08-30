@@ -16,6 +16,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "extension"
+rootProject.name = "Echo Genius Extension"
 include(":app")
 include(":ext")
