@@ -4,5 +4,5 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class Response(
-    val hits: List<GeniusEntity>
+    val hits: List<GeniusEntity> = emptyList()
 )
