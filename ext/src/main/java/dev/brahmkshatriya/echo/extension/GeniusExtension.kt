@@ -15,6 +15,7 @@ import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.SettingTextInput
 import dev.brahmkshatriya.echo.common.settings.Settings
 import dev.brahmkshatriya.echo.extension.lyrics_response.LyricsResponse
+import dev.brahmkshatriya.echo.extension.lyrics_response.Song
 import dev.brahmkshatriya.echo.extension.search_response.GeniusEntity
 import dev.brahmkshatriya.echo.extension.search_response.SearchResponse
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
 import java.net.URLEncoder
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
@@ -88,21 +90,22 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         val artistName = track.artists.firstOrNull()?.name?.trim().orEmpty()
         val cleanTitle = cleanTrackTitle(rawTitle)
 
-        // Stage 1: Search using cleaned title + artist
-        var hits = searchHits("$cleanTitle $artistName".trim())
+        // Stage 1: Cleaned Title + Artist
+        val primaryQuery = if (artistName.isNotBlank()) "$cleanTitle $artistName" else cleanTitle
+        var hits = searchHits(primaryQuery)
 
-        // Stage 2: Fallback to original title + artist if clean title produced no results
+        // Stage 2: Fallback to original Title + Artist if cleaned produced nothing
         if (hits.isEmpty() && cleanTitle != rawTitle) {
-            hits = searchHits("$rawTitle $artistName".trim())
+            val fallbackQuery = if (artistName.isNotBlank()) "$rawTitle $artistName" else rawTitle
+            hits = searchHits(fallbackQuery)
         }
 
-        // Stage 3: Fallback to cleaned title alone
-        if (hits.isEmpty() && cleanTitle.isNotBlank()) {
+        // Stage 3: Fallback to cleaned Title alone (if artist was included initially)
+        if (hits.isEmpty() && artistName.isNotBlank() && cleanTitle.isNotBlank()) {
             hits = searchHits(cleanTitle)
         }
 
         val lyricsList = mutableListOf<Lyrics>()
-
         val includeTranslations = setting?.getBoolean(SETTING_INCLUDE_TRANSLATIONS)
             ?: SETTING_INCLUDE_TRANSLATIONS_DEFAULT
 
@@ -116,20 +119,12 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
                 )
             )
 
-            // Look up translation/romanization variants for the top match
+            // Look up translated and Romanized variants for the top match
             if (includeTranslations) {
                 try {
                     val songDetails = fetchSongDetails(topHit.id)
                     songDetails.translationSongs.forEach { trans ->
-                        val langLabel = when (trans.language?.lowercase()) {
-                            "romanization" -> "Romanized"
-                            "en" -> "English Translation"
-                            "es" -> "Spanish Translation"
-                            "zh-hant", "zh-hans", "zh" -> "Chinese Translation"
-                            "ja" -> "Japanese Translation"
-                            "ko" -> "Korean Translation"
-                            else -> trans.language?.replaceFirstChar { it.uppercase() } ?: "Translation"
-                        }
+                        val langLabel = formatLanguageLabel(trans.language)
                         lyricsList.add(
                             Lyrics(
                                 id = trans.id.toString(),
@@ -177,7 +172,6 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         val songId = lyrics.id.toLongOrNull() ?: return@withContext lyrics
         val song = fetchSongDetails(songId)
 
-        // 1. Resolve raw lyrics content
         var rawLyrics = song.lyrics?.plain?.trim()
 
         if (rawLyrics.isNullOrBlank() && song.lyrics?.dom != null) {
@@ -188,13 +182,11 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
             rawLyrics = if (song.instrumental == true) "[Instrumental]" else ""
         }
 
-        // 2. Clean section headers if preference enabled
         val cleanHeaders = setting?.getBoolean(SETTING_CLEAN_HEADERS) ?: SETTING_CLEAN_HEADERS_DEFAULT
         if (cleanHeaders && rawLyrics.isNotBlank()) {
-            rawLyrics = rawLyrics.replace(Regex("""(?m)^\[.*?\]\s*$\n?"""), "").trim()
+            rawLyrics = HEADER_REGEX.replace(rawLyrics, "").trim()
         }
 
-        // 3. Append song story and credits if preference enabled
         val appendBio = setting?.getBoolean(SETTING_APPEND_BIO) ?: SETTING_APPEND_BIO_DEFAULT
         val finalText = if (appendBio && rawLyrics.isNotBlank()) {
             formatLyricsWithStoryAndCredits(rawLyrics, song)
@@ -209,18 +201,18 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
 
     private fun formatLyricsWithStoryAndCredits(
         lyricsText: String,
-        song: dev.brahmkshatriya.echo.extension.lyrics_response.Song
+        song: Song
     ): String {
         val story = song.description?.plain?.trim()
         val hasStory = !story.isNullOrBlank() && story != "?" && story.length > 15
 
         val credits = buildList {
-            song.album?.name?.takeIf { it.isNotBlank() }?.let { add("• Album: $it") }
-            song.releaseDate?.takeIf { it.isNotBlank() }?.let { add("• Released: $it") }
+            song.album?.name?.takeIf { it.isNotBlank() }?.let { add("Album: $it") }
+            song.releaseDate?.takeIf { it.isNotBlank() }?.let { add("Released: $it") }
             val writers = song.writerArtists.mapNotNull { it.name }.filter { it.isNotBlank() }
-            if (writers.isNotEmpty()) add("• Written by: ${writers.joinToString(", ")}")
+            if (writers.isNotEmpty()) add("Written by: ${writers.joinToString(", ")}")
             val producers = song.producerArtists.mapNotNull { it.name }.filter { it.isNotBlank() }
-            if (producers.isNotEmpty()) add("• Produced by: ${producers.joinToString(", ")}")
+            if (producers.isNotEmpty()) add("Produced by: ${producers.joinToString(", ")}")
         }
 
         if (!hasStory && credits.isEmpty()) {
@@ -229,23 +221,31 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
 
         return buildString {
             append(lyricsText)
-            append("\n\n")
-            append("════════════════════════════════\n")
-            append("ABOUT THIS SONG\n")
-            append("════════════════════════════════\n")
+            append("\n\n--- About This Song ---\n")
             if (hasStory) {
                 append(story)
-                append("\n\n")
+                append("\n")
             }
             if (credits.isNotEmpty()) {
+                if (hasStory) append("\n")
                 append(credits.joinToString("\n"))
             }
         }.trim()
     }
 
-    private suspend fun fetchSongDetails(
-        songId: Long
-    ): dev.brahmkshatriya.echo.extension.lyrics_response.Song {
+    private fun formatLanguageLabel(lang: String?): String {
+        if (lang.isNullOrBlank()) return "Translation"
+        if (lang.equals("romanization", ignoreCase = true)) return "Romanized"
+        val locale = Locale.forLanguageTag(lang)
+        val display = locale.getDisplayLanguage(Locale.ENGLISH)
+        return if (display.isNotBlank() && !display.equals(lang, ignoreCase = true)) {
+            "$display Translation"
+        } else {
+            "${lang.replaceFirstChar { it.uppercase() }} Translation"
+        }
+    }
+
+    private suspend fun fetchSongDetails(songId: Long): Song {
         val url = "${BASE_URL}songs/$songId?text_format=plain"
         val responseBody = httpGet(url)
         val parsed: LyricsResponse = json.decodeFromString(responseBody)
@@ -297,8 +297,6 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
             .addHeader("User-Agent", USER_AGENT)
             .build()
 
-
-
         client.newCall(request).await().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("Genius API error: HTTP ${response.code} ${response.message}")
@@ -342,30 +340,12 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
 
     private fun cleanTrackTitle(title: String): String {
         var cleaned = title
-        // Strip parenthesized / bracketed video, audio, or live metadata
-        cleaned = cleaned.replace(
-            Regex("""(?i)\s*[\[(](official\s*(music\s*)?video|video|audio|lyric\s*video|lyrics|visualizer|mv|hd|hq|4k|extended|bonus\s*track|live(\s*at\s*[^\])]+)?)[\])]"""),
-            ""
-        )
-        // Strip remaster tags (both bracketed and hyphenated)
-        cleaned = cleaned.replace(
-            Regex("""(?i)\s*[\[(]remaster(ed)?(\s*\d+)?[\])]"""),
-            ""
-        )
-        cleaned = cleaned.replace(
-            Regex("""(?i)\s*-\s*remaster(ed)?(\s*\d+)?.*$"""),
-            ""
-        )
-        cleaned = cleaned.replace(
-            Regex("""(?i)\s*-\s*live(\s*at\s*.*)?$"""),
-            ""
-        )
-        // Strip featured artist annotations
-        cleaned = cleaned.replace(
-            Regex("""(?i)\s*[\[(](feat\.?|ft\.?)\s*[^\])]+[\])]"""),
-            ""
-        )
-        return cleaned.replace(Regex("""\s+"""), " ").trim()
+        cleaned = VIDEO_AUDIO_ANNOTATION_REGEX.replace(cleaned, "")
+        cleaned = BRACKETED_REMASTER_REGEX.replace(cleaned, "")
+        cleaned = TRAILING_REMASTER_REGEX.replace(cleaned, "")
+        cleaned = TRAILING_LIVE_REGEX.replace(cleaned, "")
+        cleaned = FEATURING_REGEX.replace(cleaned, "")
+        return MULTI_SPACE_REGEX.replace(cleaned, " ").trim()
     }
 
     private companion object {
@@ -373,12 +353,9 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         private const val AUTH_HEADER = "Authorization"
         private const val DEFAULT_GENIUS_API_TOKEN =
             "ZTejoT_ojOEasIkT9WrMBhBQOz6eYKK5QULCMECmOhvwqjRZ6WbpamFe3geHnvp3"
-        private const val USER_AGENT =
-            "Genius/2.15.0 (Android 14; Mobile)"
+        private const val USER_AGENT = "Genius/2.15.0 (Android 14; Mobile)"
 
         private const val SETTING_APPEND_BIO = "append_song_bio"
-
-
         private const val SETTING_APPEND_BIO_DEFAULT = true
 
         private const val SETTING_CLEAN_HEADERS = "clean_headers"
@@ -388,5 +365,14 @@ class GeniusExtension : ExtensionClient, LyricsClient, LyricsSearchClient {
         private const val SETTING_INCLUDE_TRANSLATIONS_DEFAULT = true
 
         private const val SETTING_CUSTOM_TOKEN = "custom_token"
+
+        private val HEADER_REGEX = Regex("""(?m)^\[.*?\]\s*$\n?""")
+        private val VIDEO_AUDIO_ANNOTATION_REGEX =
+            Regex("""(?i)\s*[\[(](official\s*(music\s*)?video|video|audio|lyric\s*video|lyrics|visualizer|mv|hd|hq|4k|extended|bonus\s*track|live(\s*at\s*[^\])]+)?)[\])]""")
+        private val BRACKETED_REMASTER_REGEX = Regex("""(?i)\s*[\[(]remaster(ed)?(\s*\d+)?[\])]""")
+        private val TRAILING_REMASTER_REGEX = Regex("""(?i)\s*-\s*remaster(ed)?(\s*\d+)?.*$""")
+        private val TRAILING_LIVE_REGEX = Regex("""(?i)\s*-\s*live(\s*at\s*.*)?$""")
+        private val FEATURING_REGEX = Regex("""(?i)\s*[\[(](feat\.?|ft\.?)\s*[^\])]+[\])]""")
+        private val MULTI_SPACE_REGEX = Regex("""\s+""")
     }
 }
