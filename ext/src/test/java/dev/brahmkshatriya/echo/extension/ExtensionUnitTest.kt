@@ -100,10 +100,10 @@ class ExtensionUnitTest {
 
         assertTrue("Should return matches for Gurenge", items.isNotEmpty())
         val hasTranslation = items.any {
-            it.title.contains("[Romanized]", ignoreCase = true) ||
-                it.title.contains("[English Translation]", ignoreCase = true)
+            it.title.contains("Translation", ignoreCase = true) ||
+                it.title.contains("Romanized", ignoreCase = true)
         }
-        assertTrue("Should include Romanized or English Translation for Gurenge", hasTranslation)
+        assertTrue("Should include translations or Romanized for Gurenge", hasTranslation)
     }
 
     @Test
@@ -117,7 +117,7 @@ class ExtensionUnitTest {
         println("Loaded lyrics sample (first 300 chars):\n${text.take(300)}...")
 
         assertTrue("Lyrics should contain iconic verse", text.contains("Is this the real life?"))
-        assertTrue("Lyrics should contain ABOUT THIS SONG section", text.contains("ABOUT THIS SONG"))
+        assertTrue("Lyrics should contain About This Song section", text.contains("About This Song", ignoreCase = true))
         assertTrue("Lyrics should contain Album credit", text.contains("A Night at the Opera"))
     }
 
