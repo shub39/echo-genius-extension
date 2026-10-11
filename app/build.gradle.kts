@@ -9,14 +9,6 @@ dependencies {
     compileOnly(libs.kotlin.stdlib)
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
-kotlin {
-    jvmToolchain(17)
-}
 
 val extType: String by project
 val extId: String by project
@@ -32,8 +24,8 @@ val extAuthorUrl: String? by project
 val extRepoUrl: String? by project
 val extUpdateUrl: String? by project
 
-val gitHash = execute("git", "rev-parse", "HEAD").take(7)
-val gitCount = execute("git", "rev-list", "--count", "HEAD").toInt()
+val gitHash = execute("git", "rev-parse", "HEAD").take(7).ifBlank { "main" }
+val gitCount = execute("git", "rev-list", "--count", "HEAD").toIntOrNull() ?: 1
 val verCode = gitCount
 val verName = "v$gitHash"
 
@@ -102,12 +94,10 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
 }
 
-fun execute(vararg command: String): String = providers.exec {
-    commandLine(*command)
-}.standardOutput.asText.get().trim()
+fun execute(vararg command: String): String = runCatching {
+    providers.exec {
+        commandLine(*command)
+    }.standardOutput.asText.get().trim()
+}.getOrElse { "" }
