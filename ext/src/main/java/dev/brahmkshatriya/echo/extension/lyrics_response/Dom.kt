@@ -5,6 +5,6 @@ import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class Dom(
-    val tag: String,
-    val children: List<JsonElement>
+    val tag: String? = null,
+    val children: List<JsonElement> = emptyList()
 )
